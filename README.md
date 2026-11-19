@@ -36,11 +36,13 @@ Put the front-end, nginx config and compose file in one directory:
 
 ```
 lsj-site/
-├── site/                       # extracted website archive
-├── nginx.conf
+├── sites/lsj/                  # extracted website archive for this site
+├── nginx.conf                  # LSJ server block (one of several sites nginx serves)
 ├── docker-compose.yml
 └── .env
 ```
+
+`nginx.conf` uses the placeholder `lsj.example.com`. Replace it with the hostname that Cloudflare Tunnel sends for this site. Other sites keep their own server blocks; leave their configs alone.
 
 `.env`:
 
@@ -59,7 +61,7 @@ docker compose up -d
 ## Deploying a site update
 
 1. In GitHub, run the **Build site** workflow (it also runs automatically when `frontend/` changes on `main`).
-2. Download the `lsj-site` artifact and unpack it into `./site` on your server.
+2. Download the `lsj-site` artifact and unpack it into `./sites/lsj` on your server (files must be directly in that folder, not in a nested `frontend/`).
 3. The files are served immediately (nginx reads from the mounted directory). Run `docker compose restart nginx` only if you change `nginx.conf` or `.env`.
 
 ## Importing data

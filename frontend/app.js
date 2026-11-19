@@ -59,11 +59,13 @@ function render(rows) {
 
     const head = document.createElement("h2");
     head.className = "head";
+    head.lang = "grc";
     head.textContent = row.headword || "—";
     body.append(head);
 
     const orth = document.createElement("div");
     orth.className = "orth";
+    orth.lang = "grc";
     orth.textContent = row.orth || "";
     body.append(orth);
 
@@ -111,7 +113,8 @@ async function query(sql, args) {
 }
 
 async function showRandom() {
-  const letters = [...GREEK_LETTERS].sort(() => Math.random() - 0.5);
+  const start = Math.floor(Math.random() * GREEK_LETTERS.length);
+  const letters = [...GREEK_LETTERS.slice(start), ...GREEK_LETTERS.slice(0, start)];
   for (const letter of letters.slice(0, 3)) {
     try {
       const rows = await query(RANDOM_SQL, [{ type: "text", value: letter }]);
@@ -122,7 +125,8 @@ async function showRandom() {
       }
     } catch (error) {
       if (error.name === "AbortError") return;
-      throw error;
+      statusEl.textContent = `Error: ${error.message}`;
+      return;
     }
   }
   resultsEl.replaceChildren();

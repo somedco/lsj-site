@@ -125,9 +125,6 @@ class Turso:
         result = self.call([statement(sql, args)])[0]
         return [[cell.get("value") for cell in row] for row in result["response"]["result"]["rows"]]
 
-    def execute(self, requests: list) -> None:
-        self.call(requests)
-
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -137,7 +134,7 @@ def main() -> None:
     db = Turso(os.environ["TURSO_DATABASE_URL"], os.environ["TURSO_AUTH_TOKEN"])
     sha = os.environ.get("UPSTREAM_SHA", "")
 
-    db.execute([statement(sql, want_rows=False) for sql in SCHEMA])
+    db.call([statement(sql, want_rows=False) for sql in SCHEMA])
 
     previous = db.rows("SELECT v FROM meta WHERE k = ?", [META_KEY])
     if sha and previous and previous[0][0] == sha:
@@ -151,7 +148,7 @@ def main() -> None:
     def flush() -> None:
         nonlocal batch, batch_bytes
         if batch:
-            db.execute(batch)
+            db.call(batch)
             batch = []
             batch_bytes = 0
 
@@ -172,7 +169,7 @@ def main() -> None:
         print(f"Parsed {path.name}")
     flush()
 
-    db.execute([statement(SET_META, [META_KEY, sha], want_rows=False)])
+    db.call([statement(SET_META, [META_KEY, sha], want_rows=False)])
     print(f"Imported {total} entries from {len(files)} files (upstream {sha or 'unknown'}).")
 
 

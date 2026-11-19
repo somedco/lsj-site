@@ -1,0 +1,16 @@
+.env
+site/
+*.tar.gz
+__pycache__/
+*.pyc
+.playwright-mcp/
+.impeccable/
+.taste-skill/
+shots/
+DESIGN.md
+design-demos/
+directions.md
+polish-log.md
+direction-approved.md
+product-facts.md
+brand-spec.md

@@ -1,0 +1,25 @@
+name: Build site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "frontend/**"
+      - ".github/workflows/build-site.yml"
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Package static front-end
+        run: tar -czf lsj-site.tar.gz -C frontend .
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: lsj-site
+          path: lsj-site.tar.gz
+          retention-days: 30

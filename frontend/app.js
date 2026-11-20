@@ -2,6 +2,7 @@
 
 // Fixed SQL: user input is only ever sent as a bound argument, never as SQL text.
 const SEARCH_SQL = `SELECT id, headword, orth, substr(body, 1, 2000) AS body,
+  COALESCE(senses, '') AS senses,
   CASE WHEN headword_norm LIKE ? || '%' THEN 0 ELSE 1 END AS rank
   FROM entries
   WHERE headword_norm LIKE ? || '%' OR body_norm LIKE '%' || ? || '%'
@@ -9,7 +10,8 @@ const SEARCH_SQL = `SELECT id, headword, orth, substr(body, 1, 2000) AS body,
   LIMIT 25`;
 
 // Landing entry: a random letter narrows the scan, then one entry is picked.
-const RANDOM_SQL = `SELECT id, headword, orth, substr(body, 1, 2000) AS body
+const RANDOM_SQL = `SELECT id, headword, orth, substr(body, 1, 2000) AS body,
+  COALESCE(senses, '') AS senses
   FROM entries
   WHERE headword_norm LIKE ? || '%'
   ORDER BY RANDOM()
@@ -34,6 +36,50 @@ function normalize(value) {
     .replace(/[^\p{L}\p{N}\s-]/gu, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+function addText(parent, className, text) {
+  const element = document.createElement("div");
+  element.className = className;
+  element.textContent = text;
+  parent.append(element);
+}
+
+function renderSenses(container, raw) {
+  let senses;
+  try {
+    senses = raw ? JSON.parse(raw) : [];
+  } catch (error) {
+    senses = [];
+  }
+  if (!senses.length) return false;
+
+  for (const sense of senses.slice(0, 30)) {
+    const section = document.createElement("section");
+    section.className = "sense-row";
+
+    if (sense.label) {
+      const label = document.createElement("span");
+      label.className = "sense-label";
+      label.textContent = sense.label;
+      section.append(label);
+    }
+    if (sense.gloss && sense.gloss.length) {
+      addText(section, "sense-gloss", sense.gloss.join("; "));
+    }
+    if (sense.greek && sense.greek.length) {
+      const greek = document.createElement("div");
+      greek.className = "sense-greek";
+      greek.lang = "grc";
+      greek.textContent = sense.greek.join(" · ");
+      section.append(greek);
+    }
+    if (sense.citations && sense.citations.length) {
+      addText(section, "sense-cites", sense.citations.join("; "));
+    }
+    container.append(section);
+  }
+  return true;
 }
 
 function render(rows) {
@@ -69,10 +115,9 @@ function render(rows) {
     orth.textContent = row.orth || "";
     body.append(orth);
 
-    const gloss = document.createElement("p");
-    gloss.className = "gloss";
-    gloss.textContent = row.body || "(no gloss available)";
-    body.append(gloss);
+    if (!renderSenses(body, row.senses)) {
+      addText(body, "gloss", row.body || "(no gloss available)");
+    }
 
     entry.append(body);
     resultsEl.append(entry);

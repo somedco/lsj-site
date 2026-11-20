@@ -11,7 +11,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-BATCH_SIZE = 100
+BATCH_SIZE = 300
 BATCH_BYTES = 1_000_000
 META_KEY = "upstream_sha"
 
@@ -22,20 +22,22 @@ SCHEMA = [
         orth TEXT,
         body TEXT,
         headword_norm TEXT NOT NULL,
-        body_norm TEXT NOT NULL
+        body_norm TEXT NOT NULL,
+        senses TEXT
     )""",
     "CREATE INDEX IF NOT EXISTS idx_entries_headword_norm ON entries(headword_norm)",
     "CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)",
 ]
 
-UPSERT = """INSERT INTO entries (id, headword, orth, body, headword_norm, body_norm)
-VALUES (?, ?, ?, ?, ?, ?)
+UPSERT = """INSERT INTO entries (id, headword, orth, body, headword_norm, body_norm, senses)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
     headword=excluded.headword,
     orth=excluded.orth,
     body=excluded.body,
     headword_norm=excluded.headword_norm,
-    body_norm=excluded.body_norm"""
+    body_norm=excluded.body_norm,
+    senses=excluded.senses"""
 
 SET_META = """INSERT INTO meta (k, v) VALUES (?, ?)
 ON CONFLICT(k) DO UPDATE SET v=excluded.v"""
@@ -58,8 +60,68 @@ def _tag(element: ET.Element) -> str:
     return element.tag.rsplit("}", 1)[-1]
 
 
+def _text(element: ET.Element) -> str:
+    return "".join(element.itertext()).strip()
+
+
+def _owner_sense(node: ET.Element, parents: dict) -> ET.Element | None:
+    current = parents.get(node)
+    while current is not None and _tag(current) != "sense":
+        current = parents.get(current)
+    return current
+
+
+def parse_senses(element: ET.Element) -> list:
+    """Build a small JSON-ready list: intro, then one item per sense."""
+    parents = {child: parent for parent in element.iter() for child in parent}
+    buckets: dict = {}
+    intro = {"label": "", "level": "", "gloss": [], "greek": [], "citations": []}
+
+    def bucket(node: ET.Element) -> dict:
+        owner = _owner_sense(node, parents)
+        if owner is None:
+            return intro
+        if owner not in buckets:
+            buckets[owner] = {"label": "", "level": "", "gloss": [], "greek": [], "citations": []}
+        return buckets[owner]
+
+    for node in element.iter():
+        tag = _tag(node)
+        if tag in ("tr", "def"):
+            value = _text(node)
+            if value:
+                bucket(node)["gloss"].append(value)
+        elif tag in ("quote", "foreign"):
+            value = _text(node)
+            if value:
+                bucket(node)["greek"].append(value)
+        elif tag == "bibl":
+            author = " ".join(_text(a) for a in node.iter() if _tag(a) == "author")
+            title = " ".join(_text(t) for t in node.iter() if _tag(t) == "title")
+            scope = " ".join(_text(s) for s in node.iter() if _tag(s) == "biblScope")
+            citation = " ".join(x for x in (author or title, scope) if x).strip()
+            if citation:
+                bucket(node)["citations"].append(citation)
+
+    result = []
+    if any(intro[key] for key in ("gloss", "greek", "citations")):
+        result.append(intro)
+
+    for sense in element.iter():
+        if _tag(sense) != "sense":
+            continue
+        item = buckets.get(sense)
+        if item is None:
+            continue
+        item["label"] = sense.get("n") or ""
+        item["level"] = sense.get("level") or ""
+        result.append(item)
+
+    return result
+
+
 def parse_file(path: Path):
-    """Yield (id, headword, orth, body) for each lexicon entry in one XML file."""
+    """Yield (id, headword, orth, body, senses_json) for each lexicon entry."""
     counter = 0
     for _, element in ET.iterparse(path, events=("end",)):
         if _tag(element) not in ("entryFree", "entry"):
@@ -69,16 +131,17 @@ def parse_file(path: Path):
         headword = element.get("key") or ""
 
         orth_node = element.find(".//orth")
-        orth = "".join(orth_node.itertext()).strip() if orth_node is not None else ""
+        orth = _text(orth_node) if orth_node is not None else ""
 
         glosses = []
         for node in element.iter():
             if _tag(node) in ("tr", "def"):
-                value = "".join(node.itertext()).strip()
+                value = _text(node)
                 if value:
                     glosses.append(value)
 
-        yield entry_id, headword, orth, " ".join(glosses)
+        senses = json.dumps(parse_senses(element), ensure_ascii=False, separators=(",", ":"))
+        yield entry_id, headword, orth, " ".join(glosses), senses
         element.clear()
 
 
@@ -88,17 +151,39 @@ def _text_arg(value) -> dict:
     return {"type": "text", "value": str(value)}
 
 
-def statement(sql: str, args=None, want_rows: bool = True) -> dict:
+def sql_stmt(sql: str, args=None, want_rows: bool = True) -> dict:
     stmt = {"sql": sql, "want_rows": want_rows}
     if args:
         stmt["args"] = [_text_arg(a) for a in args]
-    return {"type": "execute", "stmt": stmt}
+    return stmt
+
+
+def statement(sql: str, args=None, want_rows: bool = True) -> dict:
+    return {"type": "execute", "stmt": sql_stmt(sql, args, want_rows)}
+
+
+def batch_request(statements: list) -> dict:
+    """One BEGIN/COMMIT transaction. Later steps run only if earlier ones worked."""
+    steps = [{"stmt": sql_stmt("BEGIN", want_rows=False)}]
+    for index, stmt in enumerate(statements):
+        steps.append({"condition": {"type": "ok", "step": index}, "stmt": stmt})
+    last_write = len(steps) - 1
+    steps.append({
+        "condition": {"type": "ok", "step": last_write},
+        "stmt": sql_stmt("COMMIT", want_rows=False),
+    })
+    commit = len(steps) - 1
+    steps.append({
+        "condition": {"type": "not", "cond": {"type": "ok", "step": commit}},
+        "stmt": sql_stmt("ROLLBACK", want_rows=False),
+    })
+    return {"type": "batch", "batch": {"steps": steps}}
 
 
 class Turso:
     def __init__(self, url: str, token: str):
         base = url.replace("libsql://", "https://").replace("turso://", "https://")
-        self.endpoint = base.rstrip("/") + "/v2/pipeline"
+        self.endpoint = base.rstrip("/") + "/v3/pipeline"
         self.token = token
 
     def call(self, requests: list) -> list:
@@ -125,6 +210,15 @@ class Turso:
         result = self.call([statement(sql, args)])[0]
         return [[cell.get("value") for cell in row] for row in result["response"]["result"]["rows"]]
 
+    def write_batch(self, statements: list) -> None:
+        result = self.call([batch_request(statements)])[0]
+        errors = result["response"]["result"]["step_errors"]
+        if errors[-1]:
+            raise RuntimeError(errors[-1].get("message", "ROLLBACK failed"))
+        first_error = next((error for error in errors[:-1] if error), None)
+        if first_error:
+            raise RuntimeError(first_error.get("message", "Turso batch failed"))
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -135,6 +229,11 @@ def main() -> None:
     sha = os.environ.get("UPSTREAM_SHA", "")
 
     db.call([statement(sql, want_rows=False) for sql in SCHEMA])
+    try:
+        db.call([statement("ALTER TABLE entries ADD COLUMN senses TEXT", want_rows=False)])
+    except RuntimeError as error:
+        if "duplicate column name" not in str(error).lower():
+            raise  # a real error must stop the import
 
     previous = db.rows("SELECT v FROM meta WHERE k = ?", [META_KEY])
     if sha and previous and previous[0][0] == sha:
@@ -148,21 +247,21 @@ def main() -> None:
     def flush() -> None:
         nonlocal batch, batch_bytes
         if batch:
-            db.call(batch)
+            db.write_batch(batch)
             batch = []
             batch_bytes = 0
 
     files = sorted(options.source_dir.glob("grc.lsj.perseus-eng*.xml"))
     for path in files:
-        for entry_id, headword, orth, body in parse_file(path):
+        for entry_id, headword, orth, body, senses in parse_file(path):
             batch.append(
-                statement(
+                sql_stmt(
                     UPSERT,
-                    [entry_id, headword, orth, body, normalize(headword), normalize(body)],
+                    [entry_id, headword, orth, body, normalize(headword), normalize(body), senses],
                     want_rows=False,
                 )
             )
-            batch_bytes += len(body)
+            batch_bytes += len(body) + len(senses)
             total += 1
             if len(batch) >= BATCH_SIZE or batch_bytes >= BATCH_BYTES:
                 flush()

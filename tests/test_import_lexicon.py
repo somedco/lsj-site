@@ -16,8 +16,10 @@ SAMPLE = """<TEI.2><text><body>
 <div0 type="alphabetic letter">
 <entryFree id="n1" key="λόγος" type="main">
   <orth extent="full" lang="greek">λόγος</orth>
-  <sense n="A"><tr>word, speech</tr></sense>
-  <sense n="B"><tr>reason, account</tr></sense>
+  <sense id="n1a" n="A" level="1"><tr>word, speech</tr>
+    <cit><quote lang="greek">λόγος</quote><bibl><author>Pl.</author><biblScope>1.2</biblScope></bibl></cit>
+  </sense>
+  <sense id="n1b" n="B" level="2"><tr>reason, account</tr></sense>
 </entryFree>
 <entryFree key="Ϝ"><orth>Ϝ ϝ</orth><tr>w,</tr></entryFree>
 </div0></body></text></TEI.2>"""
@@ -30,7 +32,7 @@ class ImportLexiconTests(unittest.TestCase):
         self.assertEqual(import_lexicon.normalize("κόσμος"), "κοσμοσ")
         self.assertEqual(import_lexicon.normalize("ὁ δὲ λόγος"), "ο δε λογοσ")
 
-    def test_parse_file_extracts_entries(self):
+    def test_parse_file_extracts_entries_and_senses(self):
         path = Path(__file__).with_name("sample.xml")
         path.write_text(SAMPLE, encoding="utf-8")
         try:
@@ -39,18 +41,38 @@ class ImportLexiconTests(unittest.TestCase):
             path.unlink()
 
         self.assertEqual(len(entries), 2)
-        entry_id, headword, orth, body = entries[0]
+        entry_id, headword, orth, body, senses = entries[0]
         self.assertEqual(entry_id, "n1")
         self.assertEqual(headword, "λόγος")
         self.assertEqual(orth, "λόγος")
         self.assertEqual(body, "word, speech reason, account")
+
+        parsed = json.loads(senses)
+        self.assertEqual([s["label"] for s in parsed], ["A", "B"])
+        self.assertEqual(parsed[0]["gloss"], ["word, speech"])
+        self.assertEqual(parsed[0]["greek"], ["λόγος"])
+        self.assertEqual(parsed[0]["citations"], ["Pl. 1.2"])
+        self.assertEqual(parsed[1]["gloss"], ["reason, account"])
+
         self.assertEqual(entries[1][0], "sample-2")  # fallback id when absent
         self.assertEqual(entries[1][3], "w,")
+        self.assertEqual(json.loads(entries[1][4])[0]["gloss"], ["w,"])
 
     def test_statement_binds_text_arguments(self):
         stmt = import_lexicon.statement("SELECT ?", ["λόγος"], want_rows=False)
         self.assertEqual(stmt["stmt"]["args"], [{"type": "text", "value": "λόγος"}])
         self.assertFalse(stmt["stmt"]["want_rows"])
+
+    def test_batch_request_rolls_back_when_a_write_fails(self):
+        batch = import_lexicon.batch_request([
+            import_lexicon.sql_stmt("SELECT 1", want_rows=False),
+            import_lexicon.sql_stmt("SELECT 2", want_rows=False),
+        ])
+        steps = batch["batch"]["steps"]
+        self.assertEqual([s["stmt"]["sql"] for s in steps[:1]], ["BEGIN"])
+        self.assertEqual(steps[1]["condition"], {"type": "ok", "step": 0})
+        self.assertEqual(steps[3]["stmt"]["sql"], "COMMIT")
+        self.assertEqual(steps[4]["condition"], {"type": "not", "cond": {"type": "ok", "step": 3}})
 
     def test_failed_batch_does_not_store_upstream_sha(self):
         def ok_result(rows=None, cols=None):
@@ -66,11 +88,17 @@ class ImportLexiconTests(unittest.TestCase):
 
         def fake_urlopen(req, timeout=None):
             calls.append(json.loads(req.data.decode("utf-8")))
-            if len(calls) == 1:  # schema
+            n = len(calls)
+            if n == 1:  # schema
                 return response(*[ok_result() for _ in range(3)])
-            if len(calls) == 2:  # meta lookup
+            if n == 2:  # migration
+                return response(ok_result())
+            if n == 3:  # meta lookup
                 return response(ok_result(rows=[], cols=[{"name": "v"}]))
-            return response({"type": "error", "error": {"message": "write failed"}})
+            errors = [None, {"message": "write failed"}, None, None, None]
+            batch = {"type": "batch", "response": {"type": "batch", "result": {
+                "step_results": [None] * 5, "step_errors": errors}}}
+            return response(batch)
 
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp)

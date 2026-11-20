@@ -180,16 +180,38 @@ input:focus {
   margin: 12px 0 0;
 }
 
-.sense {
-  display: grid;
-  grid-template-columns: 26px 1fr;
-  gap: 8px;
-  font: 400 16px/1.6 var(--serif);
-  color: var(--muted);
+.sense-row {
+  border-top: 1px solid var(--line);
+  padding: 12px 0 4px;
+  margin-top: 12px;
+}
+
+.sense-row:first-child { border-top: 0; margin-top: 12px; }
+
+.sense-label {
+  display: inline-block;
+  min-width: 26px;
+  font: 600 13px/1 var(--sans);
+  color: var(--accent);
+  letter-spacing: .04em;
+}
+
+.sense-gloss {
+  font: 400 17px/1.5 var(--serif);
+  margin-top: 4px;
+}
+
+.sense-greek {
+  font: 400 15px/1.5 var(--serif);
+  color: var(--ink);
   margin-top: 6px;
 }
 
-.sense b { font-weight: 600; color: var(--accent); }
+.sense-cites {
+  font: 400 12px/1.5 var(--sans);
+  color: var(--muted);
+  margin-top: 4px;
+}
 
 .source {
   border-top: 1px solid var(--line);

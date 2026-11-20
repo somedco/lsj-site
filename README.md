@@ -87,7 +87,9 @@ python3 -m unittest discover -s tests
 
 Each XML entry is stored with its Greek headword, orthography and English glosses, plus accent-stripped, lowercased copies for matching. Search binds the (normalized) user input to a fixed SQL query: headword prefix matches rank first, then English definition matches. No user text is ever interpolated into SQL.
 
-The nginx proxy uses Turso's `/v2/pipeline` HTTP protocol. It is the one part coupled to an external wire format; if Turso changes it, only `nginx.conf` and the two JSON payloads in `scripts/import_lexicon.py` / `frontend/app.js` need updating.
+The nginx proxy uses Turso's `/v2/pipeline` HTTP protocol; the importer uses `/v3/pipeline` so each batch of upserts runs in one transaction. These are the parts coupled to an external wire format; if Turso changes them, update `nginx.conf` and the JSON payloads in `scripts/import_lexicon.py` / `frontend/app.js`.
+
+Each entry keeps its glosses for search plus a JSON list of senses (label, gloss, Greek text and citations). The page shows the senses; entries imported before this change fall back to the old single gloss string until the next full import.
 
 ## License
 

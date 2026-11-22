@@ -38,88 +38,106 @@ function normalize(value) {
     .replace(/\s+/g, " ");
 }
 
-function addText(parent, className, text) {
-  const element = document.createElement("div");
-  element.className = className;
-  element.textContent = text;
-  parent.append(element);
+function parseSenses(raw) {
+  try {
+    return raw ? JSON.parse(raw) : [];
+  } catch (error) {
+    return [];
+  }
 }
 
-function renderSenses(container, raw) {
-  let senses;
-  try {
-    senses = raw ? JSON.parse(raw) : [];
-  } catch (error) {
-    senses = [];
-  }
-  if (!senses.length) return false;
+function previewFor(row, senses) {
+  const first = senses[0];
+  const gloss = first && Array.isArray(first.gloss) ? first.gloss.join(", ") : "";
+  return gloss || (row.body || "").replace(/\s+/g, " ").slice(0, 120) || "—";
+}
 
-  for (const sense of senses.slice(0, 30)) {
-    const section = document.createElement("section");
-    section.className = "sense-row";
+function senseNode(sense) {
+  const section = document.createElement("div");
+  section.className = "sense";
 
-    if (sense.label) {
-      const label = document.createElement("span");
-      label.className = "sense-label";
-      label.textContent = sense.label;
-      section.append(label);
-    }
-    if (sense.gloss && sense.gloss.length) {
-      addText(section, "sense-gloss", sense.gloss.join("; "));
-    }
-    if (sense.greek && sense.greek.length) {
-      const greek = document.createElement("div");
-      greek.className = "sense-greek";
-      greek.lang = "grc";
-      greek.textContent = sense.greek.join(" · ");
-      section.append(greek);
-    }
-    if (sense.citations && sense.citations.length) {
-      addText(section, "sense-cites", sense.citations.join("; "));
-    }
-    container.append(section);
+  const label = document.createElement("div");
+  label.className = "label";
+  label.textContent = sense.label || "—";
+
+  const body = document.createElement("div");
+
+  const gloss = document.createElement("p");
+  gloss.className = "gloss";
+  gloss.textContent = Array.isArray(sense.gloss)
+    ? sense.gloss.join("; ")
+    : sense.gloss || "";
+  body.append(gloss);
+
+  if (Array.isArray(sense.greek) && sense.greek.length) {
+    const greek = document.createElement("p");
+    greek.className = "greek";
+    greek.lang = "grc";
+    greek.textContent = sense.greek.join(" · ");
+    body.append(greek);
   }
-  return true;
+
+  const citations = sense.citations || [];
+  if (Array.isArray(citations) && citations.length) {
+    const cites = document.createElement("p");
+    cites.className = "cites";
+    cites.textContent = citations.join("  ·  ");
+    body.append(cites);
+  }
+
+  section.append(label, body);
+  return section;
 }
 
 function render(rows) {
   resultsEl.replaceChildren();
   if (!rows.length) {
     const empty = document.createElement("p");
+    empty.className = "empty";
     empty.textContent = "No matches found.";
-    empty.style.textAlign = "center";
     resultsEl.append(empty);
     return;
   }
 
-  for (const row of rows) {
-    const entry = document.createElement("article");
+  for (const [i, row] of rows.entries()) {
+    const senses = parseSenses(row.senses);
+    const entry = document.createElement("details");
     entry.className = "entry";
+    if (i === 0) entry.open = true;
 
-    const mark = document.createElement("div");
-    mark.className = "letter";
-    mark.textContent = "§";
-    entry.append(mark);
-
-    const body = document.createElement("div");
-
+    const summary = document.createElement("summary");
+    const no = document.createElement("span");
+    no.className = "no";
+    no.textContent = String(row.id || "").padStart(2, "0");
     const head = document.createElement("h2");
     head.className = "head";
     head.lang = "grc";
     head.textContent = row.headword || "—";
-    body.append(head);
-
-    const orth = document.createElement("div");
+    const orth = document.createElement("span");
     orth.className = "orth";
     orth.lang = "grc";
     orth.textContent = row.orth || "";
-    body.append(orth);
+    const chev = document.createElement("span");
+    chev.className = "chev";
+    chev.textContent = "senses +";
+    summary.append(no, head, orth, chev);
 
-    if (!renderSenses(body, row.senses)) {
-      addText(body, "gloss", row.body || "(no gloss available)");
+    const preview = document.createElement("p");
+    preview.className = "preview";
+    preview.textContent = previewFor(row, senses);
+
+    entry.append(summary, preview);
+    if (senses.length) {
+      for (const sense of senses.slice(0, 30)) entry.append(senseNode(sense));
+    } else {
+      const gloss = document.createElement("p");
+      gloss.className = "gloss";
+      gloss.textContent = row.body || "(no gloss available)";
+      entry.append(gloss);
     }
-
-    entry.append(body);
+    entry.addEventListener("toggle", () => {
+      chev.textContent = entry.open ? "senses −" : "senses +";
+    });
     resultsEl.append(entry);
   }
 }

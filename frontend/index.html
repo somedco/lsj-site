@@ -7,7 +7,7 @@
     <meta name="description" content="Look up a Greek word or an English definition in the Liddell & Scott lexicon." />
     <meta name="page-type" content="software" />
     <meta name="site-kind" content="software" />
-    <meta name="theme-color" content="#2a1720" />
+    <meta name="theme-color" content="#eee7d8" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="LSJ Greek–English Lexicon" />
     <meta property="og:description" content="Look up a Greek word or an English definition in the lexicon of Liddell & Scott." />
@@ -16,52 +16,79 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/fonts.css" />
     <link rel="stylesheet" href="/style.css" />
-    <script>document.documentElement.classList.add('m-enter');</script>
   </head>
   <body>
-    <a class="skip-link" href="#top">Skip to content</a>
-    <div class="wrap">
-      <header class="site-head">
-        <a class="brand" href="#top">LSJ</a>
-        <a class="head-link" href="#source">Source</a>
+    <a class="skip" href="#top">Skip to content</a>
+    <div class="page">
+      <header class="mast">
+        <a class="mark" href="#top"><span class="lam" aria-hidden="true">Λ</span><span class="name">Liddell &amp; Scott · Greek–English Lexicon</span></a>
+        <span class="folio">EST. 1843 · FOL. 1</span>
+        <a class="source" href="#source">Source &amp; licence</a>
       </header>
 
-      <section class="hero" id="top" data-enter>
-        <p class="symbol greek" aria-hidden="true">λ</p>
-        <h1>The lexicon</h1>
-        <form id="search-form" autocomplete="off">
-          <label for="q">Word or definition</label>
-          <div class="field">
-            <input
-              id="q"
-              name="q"
-              type="search"
-              placeholder="Search the lexicon"
-              spellcheck="false"
-              autocapitalize="off"
-              autocomplete="off"
-            />
-            <button class="find" type="submit">Find a word</button>
+      <aside class="margin" aria-hidden="true">
+        <div class="rubric-line"></div>
+        <p class="cap">Reading note</p>
+        <p>One word, many senses. Each numbered sense is an entry in the life of the word.</p>
+        <p class="cap cap--spaced">Mark</p>
+        <p>Λ — the first letter of λόγος, the word.</p>
+        <div class="rule-note">
+          <p class="cap">The plate</p>
+          <b>λόγος, p. 901</b>
+          <p>Printed in 1883. The same entry is searchable on this page.</p>
+        </div>
+      </aside>
+
+      <main id="top">
+        <section class="opening">
+          <span class="lam" aria-hidden="true">λ</span>
+          <div class="query">
+            <p class="eyebrow">A working lexicon</p>
+            <h1>Look up a word.</h1>
+            <p class="dek">Greek headword or English definition. The plate opposite is the entry as printed in 1883; below, the same word, made searchable.</p>
+            <form id="search-form" autocomplete="off" role="search">
+              <label for="q">Word or definition</label>
+              <div class="field">
+                <input
+                  id="q"
+                  name="q"
+                  type="search"
+                  placeholder="λόγος, reason, peace…"
+                  spellcheck="false"
+                  autocapitalize="off"
+                  autocomplete="off"
+                />
+                <button class="btn" type="submit">Find</button>
+              </div>
+            </form>
+            <p id="status" class="status" role="status" aria-live="polite"></p>
           </div>
-        </form>
-        <p id="status" class="status" role="status" aria-live="polite"></p>
-      </section>
+          <figure class="plate">
+            <picture>
+              <source srcset="/assets/lexicon-page-901.webp" type="image/webp" />
+              <img src="/assets/lexicon-page-901.jpg" alt="Facsimile of the printed λόγος entry in Liddell & Scott, 1883 edition, page 901, showing numbered senses I through XI and the Latin heading B. ratio" width="1045" height="2040" />
+            </picture>
+            <figcaption><b>Plate I — λόγος</b><br />Liddell &amp; Scott, 1883, p. 901 · public-domain scan</figcaption>
+          </figure>
+        </section>
 
-      <section id="results" class="results" aria-label="Lexicon entries"></section>
+        <div class="results-head"><h2>The entry</h2><span>as printed, as searched</span></div>
+        <section id="results" class="results" aria-label="Lexicon entries"></section>
+      </main>
 
-      <section class="source" id="source" aria-labelledby="source-title">
-        <h2 id="source-title">Source</h2>
+      <section class="apparatus" id="source" aria-labelledby="source-cap">
+        <p class="cap" id="source-cap">Source</p>
         <p>
-          Lexicon text: <em>A Greek–English Lexicon</em> by Henry George Liddell and Robert Scott.
-          Unicode conversion by Giuseppe G. A. Celano. Licensed
+          Lexicon text: <em>A Greek–English Lexicon</em> by Henry George Liddell and Robert Scott,
+          Perseus Project. Unicode conversion by Giuseppe G. A. Celano. Licensed
           <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA</a>;
-          attribution is required and use is non-commercial.
+          attribution is required and use is non-commercial. Facsimile: 1883 edition, p. 901,
+          Internet Archive (public domain).
         </p>
+        <div class="colophon">
+          <a href="#top">Back to top ↑</a>
+        </div>
       </section>
-
-      <footer class="site-foot">
-        <a href="#top">Back to top ↑</a>
-      </footer>
     </div>
     <script src="/app.js" defer></script>
   </body>

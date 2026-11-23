@@ -3,9 +3,10 @@
 // Fixed SQL: user input is only ever sent as a bound argument, never as SQL text.
 const SEARCH_SQL = `SELECT id, headword, orth, substr(body, 1, 2000) AS body,
   COALESCE(senses, '') AS senses,
-  CASE WHEN headword_norm LIKE ? || '%' THEN 0 ELSE 1 END AS rank
+  CASE WHEN headword_norm LIKE ? || '%' OR headword_norm GLOB ? THEN 0 ELSE 1 END AS rank
   FROM entries
   WHERE headword_norm LIKE ? || '%' OR body_norm LIKE '%' || ? || '%'
+    OR headword_norm GLOB ? OR body_norm GLOB ?
   ORDER BY rank, length(headword_norm), headword_norm
   LIMIT 25`;
 
@@ -18,6 +19,13 @@ const RANDOM_SQL = `SELECT id, headword, orth, substr(body, 1, 2000) AS body,
   LIMIT 1`;
 
 const GREEK_LETTERS = "αβγδεζηθικλμνξοπρστυφχψω".split("");
+
+const GREEK_LETTERS_MAP = {
+  a:"α", b:"β", c:"κ", d:"δ", e:"[εη]", f:"φ", g:"γ", h:"", i:"ι",
+  k:"κ", l:"λ", m:"μ", n:"ν", o:"[οω]", p:"π", r:"ρ", s:"σ",
+  t:"τ", u:"υ", x:"ξ", y:"υ", z:"ζ",
+};
+const GREEK_DIGRAPHS = { th:"θ", ph:"φ", ch:"χ", kh:"χ", ps:"ψ" };
 
 const form = document.getElementById("search-form");
 const input = document.getElementById("q");
@@ -36,6 +44,21 @@ function normalize(value) {
     .replace(/[^\p{L}\p{N}\s-]/gu, " ")
     .trim()
     .replace(/\s+/g, " ");
+}
+
+// Latin input becomes a GLOB pattern; vowel classes cover ε/η and ο/ω in one shot.
+function greekPattern(value) {
+  let out = "";
+  for (let i = 0; i < value.length; i++) {
+    const pair = value.slice(i, i + 2);
+    if (GREEK_DIGRAPHS[pair]) {
+      out += GREEK_DIGRAPHS[pair];
+      i++;
+      continue;
+    }
+    out += GREEK_LETTERS_MAP[value[i]] ?? value[i];
+  }
+  return out;
 }
 
 function parseSenses(raw) {
@@ -205,7 +228,10 @@ async function run(term) {
 
   try {
     const arg = { type: "text", value: text };
-    const rows = await query(SEARCH_SQL, [arg, arg, arg]);
+    const pattern = greekPattern(text);
+    const headGlob = { type: "text", value: pattern + "*" };
+    const bodyGlob = { type: "text", value: "*" + pattern + "*" };
+    const rows = await query(SEARCH_SQL, [arg, headGlob, arg, arg, headGlob, bodyGlob]);
     render(rows);
     statusEl.textContent = `${rows.length} result${rows.length === 1 ? "" : "s"}`;
   } catch (error) {
